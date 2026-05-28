@@ -1,914 +1,708 @@
-# Power BI Procurement Analytics Report
-## Purchase Order Activity 2022–2024 | Executive Dashboard Blueprint
+# 📊 Procurement Analytics Report
+### Power BI · 3-Page Executive Dashboard · 5,200 Records · 2022–2024
+
+> *Transforming raw procurement data into decisions. Every visual earns its place.*
 
 ---
 
-## REPORT ARCHITECTURE OVERVIEW
+## 🗂 Table of Contents
 
-| Page | Title | Core Question Answered | Feeds Into |
-|------|-------|------------------------|------------|
-| **Page 1** | Spend Command Center | "Where is our money going and is it under control?" | Identifies which categories/suppliers need scrutiny → leads to Page 2 |
-| **Page 2** | Supplier & Contract Performance | "Are our suppliers and contracts delivering value?" | Flags delivery/quality failures and contract risks → leads to Page 3 |
-| **Page 3** | Compliance, Savings & Risk | "Are we saving money and managing risk?" | Closes the loop: correlates spend patterns with compliance and savings outcomes |
-
-**Narrative thread:** Page 1 surfaces WHERE money flows → Page 2 asks WHO is delivering it → Page 3 asks HOW well are we controlling it.
-
----
-
-## DATA MODEL NOTES
-
-Before building visuals, establish these relationships in Power Query / Model View:
-
-| Table | Key Column | Relationship |
-|-------|-----------|--------------|
-| PO_Transactions | PO_Number (PK) | Fact table |
-| Suppliers | Supplier_ID | Many-to-one from PO |
-| Contracts | Contract_ID | Many-to-one from PO |
-| Invoices | Invoice_ID, PO_Number | One-to-many from PO |
-| Payments | Payment_ID, Invoice_ID | One-to-many from Invoice |
-| Budget | Budget_ID, Category | Lookup from PO Category |
-| Savings | Savings_ID, PO_Number | One-to-one or lookup |
-| Date Table | Date (PK) | All date fields |
-
-> **Required:** Create a dedicated Date dimension table (continuous dates 01-Jan-2022 to 31-Dec-2024) and relate all date fields (PO_Date, Delivery_Date, Invoice_Date, Payment_Date) as inactive relationships, activated in measures via USERELATIONSHIP().
+- [Project Summary](#project-summary)
+- [Screenshots](#screenshots)
+- [Report Architecture](#report-architecture)
+- [Page 1 — Spend Overview & Procurement Activity](#page-1--spend-overview--procurement-activity)
+- [Page 2 — Supplier & Delivery Performance](#page-2--supplier--delivery-performance)
+- [Page 3 — Savings, Risk & Compliance](#page-3--savings-risk--compliance)
+- [Data Model & Calendar Table](#data-model--calendar-table)
+- [Calculated Columns](#calculated-columns)
+- [Full DAX Measure Library](#full-dax-measure-library)
+- [Filter Architecture](#filter-architecture)
+- [Key Findings](#key-findings)
+- [Design Philosophy](#design-philosophy)
+- [Tools & Technologies](#tools--technologies)
+- [Targets Reference](#targets-reference)
 
 ---
 
-## CALCULATED COLUMNS (Add to PO_Transactions table)
+## Project Summary
+
+| | |
+|---|---|
+| **Tool** | Microsoft Power BI Desktop |
+| **Dataset** | 5,200 procurement records — single flat fact table |
+| **Period** | January 2022 – December 2024 |
+| **Report pages** | 3 executive pages + drill-through layers |
+| **KPI cards** | 18 across all pages |
+| **DAX measures** | 40+ including dynamic insight text |
+| **Calculated columns** | 6 |
+| **Filter groups** | 6 per page · 30+ slicers |
+| **Interactivity** | Cross-filtering · drill-down · drill-through · tooltips |
+| **Primary spend metric** | `Line_Total_Inc_Tax` (final invoice value inc. tax) |
+
+This report was built to answer one question before every design decision: *does this visual help a leader make a better decision?* Not to display data — to drive action.
+
+The dataset covers purchasing transactions, supplier profiles, contract details, delivery records, invoice and payment data, budget allocations, and procurement savings — all unified in a single fact table linked to a custom Calendar table for full time intelligence.
+
+---
+
+## Screenshots
+
+### Page 1 — Spend Overview & Procurement Activity
+
+<img width="2460" height="1410" alt="1" src="https://github.com/user-attachments/assets/b495e4ad-3797-4d41-957d-f2570dead737" />
+
+> Total spend of £979.40M across 5,200 PO lines. Monthly YoY trend with green/red bar combo chart. Category and item-level drill-down. Emergency PO exposure flagged at 10.6% against a 5% target.
+
+### Page 2 — Supplier & Delivery Performance
+
+<img width="2460" height="1410" alt="2" src="https://github.com/user-attachments/assets/9ddf5d85-6988-4012-baf4-b510e99b8c34" />
+
+> OTIF rate of 64.13% against a 95% target. Scatter plot exposing spend vs delivery correlation. Global supplier map. Full supplier scorecard with conditional formatting across 9 performance dimensions.
+
+### Page 3 — Savings, Risk & Compliance
+
+<img width="2460" height="1410" alt="3" src="https://github.com/user-attachments/assets/bf4ec848-e260-4d39-acbd-cab3966d8610" />
+
+> £104.27M savings at 10.29% rate. Maverick spend of £105.40M breaching the zero target. Invoice matching gap — only 41.13% 3-way matched. Department-level compliance accountability chart.
+
+---
+
+## Report Architecture
+
+The three pages follow a deliberate narrative arc. Each page closes one question and opens the next.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Page 1 — SPEND OVERVIEW & PROCUREMENT ACTIVITY                 │
+│  How much are we spending, where is it going, and how is        │
+│  it trending over time?                                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼  Now we know the scale of spend —
+                                who is responsible for delivering it?
+┌─────────────────────────────────────────────────────────────────┐
+│  Page 2 — SUPPLIER & DELIVERY PERFORMANCE                       │
+│  Which suppliers are failing us, and what is the delivery       │
+│  and lead time risk across our supply chain?                    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼  We know where money goes and who
+                                delivers it — are controls holding?
+┌─────────────────────────────────────────────────────────────────┐
+│  Page 3 — SAVINGS, RISK & COMPLIANCE                            │
+│  Are we capturing the savings we should, and where are the      │
+│  financial control failures exposing the organisation?          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Page 1 — Spend Overview & Procurement Activity
+
+**Executive question:** *Where is money going and is our spending under control across categories, departments, and time?*
+
+### KPI Cards
+
+| KPI | Value | Insight |
+|---|---|---|
+| **Total Spend** | £979.40M | 50.2% YoY growth. Below budget. Avg tax 8.2% · Total tax £70.6M |
+| **Total PO Lines** | 5,200 | Orders raised above benchmark, suggesting consolidated purchasing |
+| **Avg PO Value** | £188.35K | Elevated — Emergency PO rate (10%) may be inflating unit costs |
+| **Budget Variance %** | 3.32% | Below budget by £33.7M — within expected spending range |
+| **Emergency PO %** | 10.17% (529 POs) | £108.8M emergency spend — above target. Review root causes by department |
+| **Cancelled PO %** | 10.60% | £115.7M cancellation spend — signals demand forecasting or approval failure |
+
+Each KPI card includes a dynamic insight text measure that updates with filter context. Micro sparkline bars show the three-year trend inline.
+
+### Visuals
+
+**V1 — How is monthly spending trending year on year?**
+*Combo chart: clustered columns (YoY % change per month) with drill-down to department*
+
+The centrepiece of Page 1. Dark navy bars show months of year-on-year growth; pink bars show decline. The YoY % label sits above or below each bar. Drilling down to department level reveals which business units are driving spend acceleration or reduction in any given month. Subtitle: *2023 vs 2022 and 2024 vs 2023 — identifies whether spend growth is accelerating, stabilising, or reversing across the procurement cycle.*
+
+**V2 — Where is our spend and volume concentrated?**
+*Bar chart with drill-down to subcategory*
+
+Sorted descending by spend. IT Software leads at £323.80M. A line overlay shows PO count per category, separating volume-driven from price-driven categories. Drill to subcategory without leaving the visual.
+
+**V3 — Spend distribution by PO type**
+*Donut chart with drill-down to PO status*
+
+Centre value: £1.01bn total budget. Standard POs = £568.36M (58%). Emergency = £108.75M (11.1%). Blanket = £201.99M (20.6%). Contract = £100.29M (10.2%). Each segment drills to PO status (Open / Closed / Cancelled / Disputed) to surface unresolved spend within each purchasing route.
+
+**V4 — Which items are driving spend, savings, and risk — and where do we need to act?**
+*Matrix table with conditional formatting*
+
+An operational item-level view for procurement managers. Columns: Item Description · Total Spend · Budget Variance % · Emergency PO % · PO Count · Total Savings · Savings Rate · Avg PO Value · On Time Delivery %. Conditional formatting on Budget Variance % (red = overspend) and On Time Delivery % (blue gradient — darker = better).
+
+---
+
+## Page 2 — Supplier & Delivery Performance
+
+**Executive question:** *Which suppliers are failing us, and what is the delivery and lead time risk across our supply chain?*
+
+### KPI Cards
+
+| KPI | Value | Insight |
+|---|---|---|
+| **On Time Delivery** | 3,335 · 64.13% | Delivered on time 64.13% of the time — ▲ up vs last year; target is 95% |
+| **Avg Lead Time** | 36 days | Ranging 0 to 90 days — lead times extended, review slow categories |
+| **Avg Days Late** | 16 days | Each day late increases downstream operational cost |
+| **Tier 1 Spend** | £326.90M · 33.38% | Consider consolidating spend toward strategic partners |
+| **High Risk Spend** | £63.52M · 6.49% | Within tolerance but requires active monitoring |
+| **Single Source** | £122.00M · 11.87% | Monitor for any new sole-source contracts entering the pipeline |
+
+### Visuals
+
+**V1 — Spend vs on-time delivery by supplier**
+*Scatter plot*
+
+X-axis: On Time Delivery %. Y-axis: Total Spend. Colour by supplier preference (Preferred · Strategic · Transactional). Average reference lines on both axes create four quadrants. The top-left danger zone (high spend, low OTIF) is where procurement action is most urgent. Subtitle: *Does higher spend with a supplier guarantee better delivery, or are we paying more for poor performance?*
+
+**V2 — Spend and delivery performance by supplier region → country**
+*Bar and line combo with drill-down*
+
+Bar height = Total Spend by region. Line = On Time Delivery % for same region. Europe leads at £454.94M with 65.46% OTIF. Oceania has the lowest spend (£79.26M) but shows 66.57% OTIF — still far short of the 95% target. Drill to country level to pinpoint delivery failure geographically.
+
+**V3 — Spend concentration by supplier tier → PO status**
+*Donut chart with drill-down*
+
+Centre value: 15 total suppliers. Strategic = £326.90M (33.38%), Preferred = £476.63M (48.67%), Transactional = £175.87M (17.96%). Each tier shows a YoY variance indicator. Drill to PO status within each tier.
+
+**V4 — Global supplier spend and risk concentration**
+*Map visual using Supplier_Latitude and Supplier_Longitude*
+
+Bubble size proportional to spend. Colour indicates supplier tier. Europe is the dominant cluster (£454.94M). Immediate visibility of single-region dependency and geographic delivery risk. Tooltip shows supplier name, tier, risk level, OTIF %, and spend on hover.
+
+**V5 — Supplier scorecard — full performance matrix**
+*Table with conditional formatting*
+
+The centrepiece of Page 2. Every active supplier in a single view. Columns: Supplier Name · Tier (badge) · Risk (badge) · Total Spend · Budget Variance % · PO Count · Avg Lead Time · Avg Days Late · On Time Delivery % · Avg ESG Score · Preference. Conditional formatting: OTIF % uses a blue gradient, Budget Variance % turns red for negative values. Sortable by any column. Drill-through to a supplier detail page showing all PO lines for that supplier.
+
+Sample visible in report:
+
+| Supplier | Tier | Risk | Total Spend | Bud Var | OTIF % | ESG |
+|---|---|---|---|---|---|---|
+| Apex Industrial Supplies | Strategic | Low | £60.37M | +2.83% | 62.81% | 75.20 |
+| Atlantic Raw Materials | Transactional | High | £63.52M | -0.26% | 63.14% | 52.00 |
+| Blue Horizon | Preferred | Low | £79.26M | +5.85% | 66.57% | 50.90 |
+
+---
+
+## Page 3 — Savings, Risk & Compliance
+
+**Executive question:** *Are we capturing the savings we should, and where are the financial control failures that expose the organisation?*
+
+### KPI Cards
+
+| KPI | Value | Insight |
+|---|---|---|
+| **Compliant Spend** | £874.00M · 89.24% | ⚠ 0.8% below target. £105.4M outside approved channels. Primary driver: Procurement |
+| **Total Saving** | £104.27M · 10.29% | Within target range (10–20%). Monitor for consistency |
+| **Maverick Spend** | £105.40M · 10.76% | ⛔ Target breached. Procurement at 14.5%. Escalate immediately |
+| **3-Way Match** | 2,139 · 41.13% | Below the 80%+ gold standard for payables control |
+| **Overdue Invoice** | £136.37M · 15.52% | Requires active monitoring — payment relationship risk |
+| **Overspend Amount** | -£18.66M | Category-level investigation required |
+
+Dynamic insight text measures drive the sub-text beneath each KPI. The maverick spend card switches between four states (zero / monitor / warning / critical) based on the current filtered value and always names the worst offending department.
+
+### Visuals
+
+**V1 — Savings delivery over time — are we on track and is the savings rate improving?**
+*Combo chart: columns + line · quarterly drill*
+
+Columns show monthly savings value — dark navy for positive months, pink for overspend (January 2023: -£5.54M). Line shows savings rate % on the same axis. January 2024 peaks at 12.53%. The quarterly drill removes month-level noise and shows directional trend more clearly.
+
+**V2 — Savings distribution by invoice aging band**
+*Donut chart*
+
+Segments: Paid (32.10% · +£33.47M) and Overdue 90+ days (67.90% · -£618.23M). Centre KPI: £979.40M total spend. The critical finding: overdue 90+ day invoices are responsible for -£618.23M in savings destruction — the single largest financial risk finding in the report. Labels show savings efficiency within each band, not savings as a share of total savings.
+
+**V3 — Does invoice matching quality affect the spend we can control?**
+*Clustered column*
+
+X-axis: Invoice Match Type (3-Way · 2-Way · No Match). Legend: Invoice Status (Disputed · Overdue · Paid · Pending). 3-Way Match carries the most Paid spend (£182.42M). No Match cluster carries £168.35M of Paid spend — payments made without a full audit trail. The 2-Way cluster shows the highest Overdue volume proportionally.
+
+**V4 — Which categories are generating savings — and which are consistently overspending?**
+*Stacked bar with drill-down to subcategory*
+
+Dark navy = Total Savings. Pink = Overspend Amount. Sorted by savings descending. IT Software: £35.91M savings, -£6.26M overspend. Professional Services: £20.63M savings, -£2.49M overspend. Raw Materials: £46.36K savings, -£4.88K overspend. Drill to subcategory to identify specific items driving budget leakage.
+
+**V5 — Which departments are most exposed to non-compliant spend?**
+*Clustered column + line*
+
+Grey bars = compliant spend per department. Red line = maverick spend value overlay. Marketing leads on maverick spend at £17.74M against £126.72M compliant spend. Legal has the highest maverick ratio relative to its spend volume. Sorted by maverick spend descending for immediate accountability visibility.
+
+---
+
+## Data Model & Calendar Table
+
+```
+data (fact table — 5,200 rows)
+  └── data[PO_Date]  →  Calendar[Date]  (many-to-one · active relationship)
+```
+
+All dimensions (supplier, department, category, contract, invoice, payment) are embedded in the single fact table. No snowflake structure. The Calendar table is marked as the Date Table in Model view, enabling all time intelligence functions.
 
 ```dax
-// 1. PO Age (days from PO date to today or delivery)
-PO Age Days =
-DATEDIFF(PO_Transactions[PO_Date], TODAY(), DAY)
+Calendar =
+ADDCOLUMNS(
+    CALENDAR(DATE(2022, 1, 1), DATE(2024, 12, 31)),
+    "Year",           YEAR([Date]),
+    "Quarter",        "Q" & QUARTER([Date]),
+    "Month Number",   MONTH([Date]),
+    "Month Name",     FORMAT([Date], "MMMM"),
+    "Month Short",    FORMAT([Date], "MMM"),
+    "Week Number",    WEEKNUM([Date]),
+    "Fiscal Year",    IF(MONTH([Date]) >= 4,
+                          "FY" & YEAR([Date]) & "/" & RIGHT(YEAR([Date]) + 1, 2),
+                          "FY" & YEAR([Date]) - 1 & "/" & RIGHT(YEAR([Date]), 2)),
+    "Fiscal Quarter", IF(MONTH([Date]) >= 4,
+                          "Q" & INT((MONTH([Date]) - 4) / 3) + 1,
+                          "Q" & INT((MONTH([Date]) + 8) / 3) + 1),
+    "Is Weekend",     IF(WEEKDAY([Date], 2) >= 6, TRUE, FALSE)
+)
+```
 
-// 2. Delivery Status
-Delivery Status =
-IF(
-    PO_Transactions[Actual_Delivery_Date] <= PO_Transactions[Expected_Delivery_Date],
-    "On Time",
-    IF(
-        ISBLANK(PO_Transactions[Actual_Delivery_Date]),
-        "Pending",
-        "Late"
+**Key field reference:**
+
+| Field | Role | Notes |
+|---|---|---|
+| `Line_Total_Inc_Tax` | Primary spend metric | Final invoice value including tax |
+| `Line_Net` | Secondary spend metric | Ex-tax analysis |
+| `Savings_Amount` | Savings / overspend | Positive = saving · Negative = overspend |
+| `Supplier_Latitude` / `Supplier_Longitude` | Map visual | Country centroid coordinates |
+| `On_Time_Delivery` | OTIF KPI driver | Yes / No · target ≥ 95% |
+| `Maverick_Spend` | Compliance flag | Yes / No · target = 0% |
+| `Invoice_Match_Type` | Control quality | 3-Way / 2-Way / No Match |
+| `Supplier_Tier` | Sourcing strategy | 1 = Strategic · 2 = Preferred · 3 = Transactional |
+
+---
+
+## Calculated Columns
+
+All columns added to the `data` table.
+
+```dax
+-- 1. Numeric risk score for scatter plot axis and sorting
+Risk_Score_Num =
+SWITCH(data[Supplier_Risk],
+    "Low",    1,
+    "Medium", 2,
+    "High",   3,
+    0)
+
+-- 2. Delivery status band for conditional formatting and filtering
+Delivery_Status =
+SWITCH(TRUE(),
+    data[Days_Late] <= 0, "On Time",
+    data[Days_Late] <= 3, "Slightly Late",
+    data[Days_Late] <= 7, "Moderately Late",
+    "Severely Late")
+
+-- 3. Savings band for grouping in distribution charts
+Savings_Band =
+SWITCH(TRUE(),
+    data[Savings_Pct] >= 15, "High Saving ≥15%",
+    data[Savings_Pct] >= 5,  "Saving 5–15%",
+    data[Savings_Pct] >= 0,  "Minimal Saving 0–5%",
+    data[Savings_Pct] < 0,   "Overspend")
+
+-- 4. PO age bucket for aging analysis
+PO_Age_Bucket =
+VAR AgeDays = DATEDIFF(data[PO_Date], TODAY(), DAY)
+RETURN
+SWITCH(TRUE(),
+    AgeDays <= 30,  "0–30 days",
+    AgeDays <= 90,  "31–90 days",
+    AgeDays <= 180, "91–180 days",
+    "> 180 days")
+
+-- 5. Contract flag — separates contracted from spot purchases
+Has_Contract =
+IF(data[Contract_ID] = "NO-CONTRACT", "No Contract", "Contracted")
+
+-- 6. Fiscal year label derived from PO date (UK fiscal: April start)
+Fiscal_Year_Label =
+VAR m = MONTH(data[PO_Date])
+VAR y = YEAR(data[PO_Date])
+RETURN
+IF(m >= 4,
+    "FY" & y & "/" & RIGHT(y + 1, 2),
+    "FY" & (y - 1) & "/" & RIGHT(y, 2))
+```
+
+---
+
+## Full DAX Measure Library
+
+### Core spend
+
+```dax
+Total Spend =
+SUM(data[Line_Total_Inc_Tax])
+
+Total Spend Net =
+SUM(data[Line_Net])
+
+PO Count =
+COUNTROWS(data)
+
+Avg PO Value =
+DIVIDE([Total Spend], [PO Count])
+```
+
+### Time intelligence
+
+```dax
+Spend PY =
+CALCULATE(
+    [Total Spend],
+    SAMEPERIODLASTYEAR('Calendar'[Date])
+)
+
+Spend YoY % Change =
+DIVIDE(
+    [Total Spend] - [Spend PY],
+    [Spend PY],
+    BLANK()          -- returns BLANK not error when PY = 0
+)
+
+Spend YoY Abs Change =
+[Total Spend] - [Spend PY]
+
+Spend YoY Direction =
+IF([Spend YoY % Change] >= 0, 1, -1)
+
+Spend 3M Rolling Avg =
+CALCULATE(
+    AVERAGEX(
+        DATESINPERIOD(
+            'Calendar'[Date],
+            LASTDATE('Calendar'[Date]),
+            -3, MONTH
+        ),
+        [Total Spend]
     )
 )
 
-// 3. Days Late
-Days Late =
-IF(
-    PO_Transactions[Actual_Delivery_Date] > PO_Transactions[Expected_Delivery_Date],
-    DATEDIFF(PO_Transactions[Expected_Delivery_Date], PO_Transactions[Actual_Delivery_Date], DAY),
-    0
+Spend YTD =
+TOTALYTD(
+    [Total Spend],
+    'Calendar'[Date],
+    "31/03"          -- UK fiscal year end
 )
-
-// 4. Invoice-to-PO Variance
-Invoice Variance =
-PO_Transactions[Invoice_Amount] - PO_Transactions[PO_Amount]
-
-// 5. Invoice Variance % 
-Invoice Variance Pct =
-DIVIDE(
-    PO_Transactions[Invoice_Amount] - PO_Transactions[PO_Amount],
-    PO_Transactions[PO_Amount],
-    0
-)
-
-// 6. Payment Status
-Payment Status =
-IF(
-    ISBLANK(PO_Transactions[Payment_Date]),
-    IF(PO_Transactions[Due_Date] < TODAY(), "Overdue", "Pending"),
-    "Paid"
-)
-
-// 7. Compliant PO Flag (PO backed by valid contract)
-Is Compliant =
-IF(
-    NOT(ISBLANK(PO_Transactions[Contract_ID])) &&
-    PO_Transactions[PO_Date] >= RELATED(Contracts[Contract_Start_Date]) &&
-    PO_Transactions[PO_Date] <= RELATED(Contracts[Contract_End_Date]),
-    1, 0
-)
-
-// 8. Spend Tier (for segmentation)
-Spend Tier =
-SWITCH(
-    TRUE(),
-    PO_Transactions[PO_Amount] >= 100000, "Strategic (≥$100K)",
-    PO_Transactions[PO_Amount] >= 25000,  "Tactical ($25K–$99K)",
-    PO_Transactions[PO_Amount] >= 5000,   "Operational ($5K–$24K)",
-    "Tail Spend (<$5K)"
-)
-
-// 9. Contract Expiry Risk (days to contract expiry from PO date)
-Days to Contract Expiry =
-DATEDIFF(
-    PO_Transactions[PO_Date],
-    RELATED(Contracts[Contract_End_Date]),
-    DAY
-)
-
-// 10. Savings Realized Flag
-Savings Realized =
-IF(PO_Transactions[Actual_Cost] < PO_Transactions[Baseline_Cost], 1, 0)
 ```
 
----
-
-## MEASURES LIBRARY (Core DAX)
+### Budget & savings
 
 ```dax
-// ─────────────────────────────────────────────
-// SPEND & VOLUME
-// ─────────────────────────────────────────────
+Total Budget =
+SUM(data[Budget_Total])
 
-Total Spend =
-SUM(PO_Transactions[PO_Amount])
+Budget Variance =
+[Total Spend] - [Total Budget]
 
-Total PO Count =
-COUNTROWS(PO_Transactions)
-
-Avg PO Value =
-DIVIDE([Total Spend], [Total PO Count])
-
-YTD Spend =
-TOTALYTD([Total Spend], 'Date'[Date])
-
-PY Spend =
-CALCULATE([Total Spend], SAMEPERIODLASTYEAR('Date'[Date]))
-
-YoY Spend Growth % =
-DIVIDE([Total Spend] - [PY Spend], [PY Spend], 0)
-
-Spend vs Budget =
-[Total Spend] - SUM(Budget[Budget_Amount])
-
-Budget Utilization % =
-DIVIDE([Total Spend], SUM(Budget[Budget_Amount]), 0)
-
-// ─────────────────────────────────────────────
-// SUPPLIER PERFORMANCE
-// ─────────────────────────────────────────────
-
-On Time Delivery Rate =
-DIVIDE(
-    COUNTROWS(FILTER(PO_Transactions, PO_Transactions[Delivery Status] = "On Time")),
-    COUNTROWS(FILTER(PO_Transactions, PO_Transactions[Delivery Status] <> "Pending")),
-    0
-)
-
-Avg Days Late =
-AVERAGEX(
-    FILTER(PO_Transactions, PO_Transactions[Days Late] > 0),
-    PO_Transactions[Days Late]
-)
-
-Supplier Count =
-DISTINCTCOUNT(PO_Transactions[Supplier_ID])
-
-Active Suppliers =
-CALCULATE(
-    DISTINCTCOUNT(PO_Transactions[Supplier_ID]),
-    PO_Transactions[PO_Date] >= DATE(YEAR(TODAY()), 1, 1)
-)
-
-Top 10 Supplier Spend =
-CALCULATE(
-    [Total Spend],
-    TOPN(10, ALL(Suppliers[Supplier_Name]), [Total Spend], DESC)
-)
-
-Supplier Spend Concentration % =
-DIVIDE([Top 10 Supplier Spend], [Total Spend], 0)
-
-// ─────────────────────────────────────────────
-// CONTRACT MANAGEMENT
-// ─────────────────────────────────────────────
-
-Contract Coverage % =
-DIVIDE(
-    CALCULATE([Total Spend], PO_Transactions[Is Compliant] = 1),
-    [Total Spend],
-    0
-)
-
-Off-Contract Spend =
-CALCULATE([Total Spend], PO_Transactions[Is Compliant] = 0)
-
-Contracts Expiring in 90 Days =
-CALCULATE(
-    DISTINCTCOUNT(Contracts[Contract_ID]),
-    Contracts[Contract_End_Date] >= TODAY(),
-    Contracts[Contract_End_Date] <= TODAY() + 90
-)
-
-// ─────────────────────────────────────────────
-// INVOICE & PAYMENT
-// ─────────────────────────────────────────────
-
-Total Invoiced =
-SUM(PO_Transactions[Invoice_Amount])
-
-Invoice Accuracy Rate =
-DIVIDE(
-    COUNTROWS(FILTER(PO_Transactions, ABS(PO_Transactions[Invoice Variance Pct]) <= 0.05)),
-    COUNTROWS(FILTER(PO_Transactions, NOT(ISBLANK(PO_Transactions[Invoice_Amount])))),
-    0
-)
-
-Total Invoice Variance =
-SUMX(PO_Transactions, PO_Transactions[Invoice Variance])
-
-Overdue Payments =
-CALCULATE([Total Spend], PO_Transactions[Payment Status] = "Overdue")
-
-Avg Payment Days =
-AVERAGEX(
-    FILTER(PO_Transactions, NOT(ISBLANK(PO_Transactions[Payment_Date]))),
-    DATEDIFF(PO_Transactions[Invoice_Date], PO_Transactions[Payment_Date], DAY)
-)
-
-// ─────────────────────────────────────────────
-// SAVINGS
-// ─────────────────────────────────────────────
+Budget Variance % =
+DIVIDE([Budget Variance], [Total Budget])
 
 Total Savings =
-SUMX(
-    FILTER(PO_Transactions, PO_Transactions[Savings Realized] = 1),
-    PO_Transactions[Baseline_Cost] - PO_Transactions[Actual_Cost]
+CALCULATE(
+    SUM(data[Savings_Amount]),
+    data[Savings_Amount] > 0
+)
+
+Total Overspend =
+CALCULATE(
+    SUM(data[Savings_Amount]),
+    data[Savings_Amount] < 0
 )
 
 Savings Rate % =
-DIVIDE([Total Savings], SUM(PO_Transactions[Baseline_Cost]), 0)
+DIVIDE([Total Savings], [Total Budget])
+```
 
-Savings vs Target =
-[Total Savings] - SUM(Savings[Savings_Target])
+### Supplier & delivery
 
-// ─────────────────────────────────────────────
-// COMPLIANCE & RISK
-// ─────────────────────────────────────────────
-
-Compliance Rate =
+```dax
+OTIF % =
 DIVIDE(
-    CALCULATE([Total PO Count], PO_Transactions[Is Compliant] = 1),
-    [Total PO Count],
-    0
+    CALCULATE([PO Count], data[On_Time_Delivery] = "Yes"),
+    [PO Count]
 )
 
-High Risk PO Count =
+OTIF Target = 0.95
+
+OTIF vs Target =
+[OTIF %] - [OTIF Target]
+
+Avg Lead Time =
+AVERAGE(data[Lead_Time_Days])
+
+Avg Days Late =
 CALCULATE(
-    [Total PO Count],
-    PO_Transactions[Is Compliant] = 0,
-    PO_Transactions[PO_Amount] >= 25000
+    AVERAGE(data[Days_Late]),
+    data[Days_Late] > 0
 )
 
-Tail Spend % =
+Late Delivery Count =
+CALCULATE([PO Count], data[On_Time_Delivery] = "No")
+
+Avg ESG Score =
+AVERAGE(data[Supplier_ESG_Score])
+
+Tier 1 Spend =
+CALCULATE([Total Spend], data[Supplier_Tier] = 1)
+
+Tier 1 Spend % =
+DIVIDE([Tier 1 Spend], [Total Spend])
+
+High Risk Spend =
+CALCULATE([Total Spend], data[Supplier_Risk] = "High")
+
+Single Source Spend =
+CALCULATE([Total Spend], data[Single_Source_Flag] = "Yes")
+
+Single Source % =
+DIVIDE([Single Source Spend], [Total Spend])
+```
+
+### Compliance & financial control
+
+```dax
+Compliant Spend Value =
+CALCULATE([Total Spend], data[Maverick_Spend] = "No")
+
+Compliant Spend % =
+DIVIDE([Compliant Spend Value], [Total Spend])
+
+Maverick Spend Value =
+CALCULATE([Total Spend], data[Maverick_Spend] = "Yes")
+
+Maverick Spend % =
+DIVIDE([Maverick Spend Value], [Total Spend])
+
+3-Way Match % =
 DIVIDE(
-    CALCULATE([Total Spend], PO_Transactions[Spend Tier] = "Tail Spend (<$5K)"),
+    CALCULATE([PO Count], data[Invoice_Match_Type] = "3-Way Match"),
+    [PO Count]
+)
+
+No Match Value =
+CALCULATE([Total Spend], data[Invoice_Match_Type] = "No Match")
+
+Match Risk Spend =
+CALCULATE(
     [Total Spend],
-    0
+    data[Invoice_Match_Type] IN {"No Match", "2-Way Match"}
 )
-```
 
----
+Overdue Invoice Value =
+CALCULATE([Total Spend], data[Invoice_Status] = "Overdue")
 
----
-
-# PAGE 1: SPEND COMMAND CENTER
-
-**Executive Question:** *"Where is our money going, is it growing or shrinking, and are we within budget?"*
-
-**Transition to Page 2:** KPI cards revealing supplier concentration or off-contract spend invite the user to drill into supplier and contract performance on Page 2.
-
----
-
-## PAGE 1 LAYOUT
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  HEADER: Filters — Year | Quarter | Category | Supplier             │
-├────────┬────────┬────────┬────────┬────────────────────────────────┤
-│ KPI 1  │ KPI 2  │ KPI 3  │ KPI 4  │  KPI 5                         │
-│ Total  │ Total  │ Budget │ YoY    │  Off-Contract                  │
-│ Spend  │ PO Cnt │ Util % │ Growth │  Spend $                       │
-├────────┴────────┴────────┴────────┴────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 1 — 60%]          │  [VISUAL 2 — 40%]                     │
-│  Spend Trend by Month      │  Spend by Category (Treemap)          │
-│  (Line + Area)             │                                       │
-│                            │                                       │
-├────────────────────────────┴───────────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 3 — 50%]          │  [VISUAL 4 — 50%]                     │
-│  Top 10 Suppliers by Spend │  Spend vs Budget by Category          │
-│  (Bar Chart)               │  (Clustered Bar)                      │
-│                            │                                       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## PAGE 1 — VISUALS & MEASURES
-
----
-
-### KPI Cards (Row of 5 cards — top of page)
-
-**Purpose:** Give executives the full picture in 5 numbers before they look at any chart.
-
-| Card | Measure | Secondary Metric | Conditional Formatting |
-|------|---------|-----------------|------------------------|
-| Total Spend | `Total Spend` | `YoY Spend Growth %` | Arrow ↑↓ with % change |
-| PO Count | `Total PO Count` | `Avg PO Value` | — |
-| Budget Utilization | `Budget Utilization %` | `Spend vs Budget` ($) | Red if >100%, Amber 90-100%, Green <90% |
-| YoY Growth | `YoY Spend Growth %` | `PY Spend` for context | Red if >10% unexplained growth |
-| Off-Contract Spend | `Off-Contract Spend` | % of Total Spend | Red if >15% of total |
-
----
-
-### Visual 1 — Monthly Spend Trend (Line + Area Chart)
-
-**Business Question:** *Is total spending accelerating, decelerating, or seasonal? Are there anomalous spikes?*
-
-**Chart type:** Area chart (shaded) with a line for Budget reference
-
-**X-axis:** Month-Year (Jan 2022 – Dec 2024)
-**Y-axis:** Spend ($)
-
-**Series:**
-- `Total Spend` (primary — area fill, blue)
-- Monthly Budget line (flat reference — dashed, gray)
-- `YTD Spend` running total (secondary axis, optional)
-
-**Measures used:**
-```dax
-// Monthly Budget Reference Line
-Monthly Budget =
-DIVIDE(SUM(Budget[Budget_Amount]), 12)
-
-// Spend Rolling 3-Month Average (smoothing)
-Spend 3M Rolling Avg =
-AVERAGEX(
-    DATESINPERIOD('Date'[Date], LASTDATE('Date'[Date]), -3, MONTH),
-    [Total Spend]
+Payment Risk Exposure =
+CALCULATE(
+    [Total Spend],
+    data[Payment_Status] IN {"Overdue", "On Hold"}
 )
-```
 
-**Annotations:** Use reference lines for COVID-period supply shocks (2022) and any contract renewal periods.
-
-**Interaction:** Click any month → filters all Page 1 visuals AND passes selection to Page 2/3 via cross-page filtering (set "Edit interactions" accordingly).
-
----
-
-### Visual 2 — Spend by Category (Treemap)
-
-**Business Question:** *Which spend categories dominate, and which are growing disproportionately?*
-
-**Chart type:** Treemap
-
-**Values:** `Total Spend`
-**Category:** `Category` (primary) > `Sub-Category` (drill-down)
-**Tooltip:** `Total Spend`, `YoY Spend Growth %`, `Budget Utilization %`, `PO Count`
-
-**Conditional coloring:**
-- Categories over budget → Red family
-- Categories within 10% of budget → Amber
-- Categories well within budget → Teal/Green
-
-**Measures used:**
-```dax
-// Category Budget Variance for color
-Category Budget Variance % =
+Emergency PO % =
 DIVIDE(
-    [Total Spend] - SUM(Budget[Budget_Amount]),
-    SUM(Budget[Budget_Amount]),
-    0
+    CALCULATE([PO Count], data[PO_Type] = "Emergency"),
+    [PO Count]
+)
+
+Cancelled PO % =
+DIVIDE(
+    CALCULATE([PO Count], data[PO_Status] = "Cancelled"),
+    [PO Count]
 )
 ```
 
-**Why treemap over pie:** Proportional area encoding handles 8–15 categories cleanly; pie charts become unreadable above 5 segments.
-
----
-
-### Visual 3 — Top 10 Suppliers by Spend (Horizontal Bar)
-
-**Business Question:** *Who are we most financially dependent on? Is supplier concentration a risk?*
-
-**Chart type:** Horizontal bar chart (ranked)
-
-**Y-axis:** Supplier Name
-**X-axis:** `Total Spend`
-**Secondary bar:** `On Time Delivery Rate` (overlaid as dots or a small secondary bar — dual encoding)
-**Color:** Gradient from highest to lowest spend
-
-**Measures used:**
-- `Total Spend`
-- `On Time Delivery Rate`
-- `Supplier Spend Concentration %` (shown in subtitle)
-- `PO Count` (shown in tooltip)
+### Dynamic insight text
 
 ```dax
-// Cumulative spend % for Pareto annotation
-Cumulative Spend % =
-VAR CurrentSupplier = MAX(Suppliers[Supplier_Name])
-VAR CurrentSpend = [Total Spend]
-VAR TotalSpend = CALCULATE([Total Spend], ALL(Suppliers))
+Compliant Spend Insight Text =
+VAR _pct       = [Compliant Spend %]
+VAR _mavVal    = FORMAT([Maverick Spend Value] / 1000000, "0.0m")
+VAR _mavPct    = FORMAT(1 - _pct, "0.0%")
+VAR _pctFmt    = FORMAT(_pct, "0.0%")
+VAR _gap       = FORMAT(ABS(_pct - 0.90), "0.0%")
+VAR _worstDept =
+    CALCULATE(
+        FIRSTNONBLANK(data[Department], 1),
+        TOPN(1, VALUES(data[Department]), [Maverick Spend %], DESC)
+    )
 RETURN
-DIVIDE(
-    SUMX(
-        FILTER(
-            ALL(Suppliers[Supplier_Name]),
-            CALCULATE([Total Spend]) >= CurrentSpend
-        ),
-        CALCULATE([Total Spend])
-    ),
-    TotalSpend
+SWITCH(TRUE(),
+    _pct >= 0.90,
+        "✓ " & _gap & " above target. Maverick spend: " & _mavVal &
+        " (" & _mavPct & "). Lowest compliance department: " & _worstDept & ".",
+    _pct >= 0.80,
+        "⚠ " & _gap & " below target. " & _mavVal &
+        " committed outside approved channels. Primary driver: " & _worstDept & ".",
+        "⛔ " & _pctFmt & " — " & _gap &
+        " below floor. " & _mavVal &
+        " outside policy. Immediate escalation required. Worst department: " & _worstDept & "."
 )
-```
 
-**Design note:** Add a vertical reference line at 80% cumulative spend to visually identify Pareto suppliers (the 20% who account for 80% of spend).
-
----
-
-### Visual 4 — Spend vs Budget by Category (Clustered Bar)
-
-**Business Question:** *Which categories are over budget and by how much?*
-
-**Chart type:** Clustered Bar (Actual vs Budget side by side) OR a single bar with a budget line overlay
-
-**Y-axis:** Category
-**X-axis:** Amount ($)
-**Series 1:** `Total Spend` (blue)
-**Series 2:** Budget target (orange reference line or bar)
-
-**Conditional formatting on data labels:** Red label if spend > budget
-
-**Measures used:**
-- `Total Spend`
-- `SUM(Budget[Budget_Amount])`
-- `Spend vs Budget` (shown in tooltip as $ overage/underage)
-- `Budget Utilization %`
-
----
-
----
-
-# PAGE 2: SUPPLIER & CONTRACT PERFORMANCE
-
-**Executive Question:** *"Are our suppliers delivering on time? Are our contracts providing value and coverage? Where are the relationship risks?"*
-
-**Transition from Page 1:** If you clicked a supplier on Page 1's bar chart, Page 2 will be filtered to that supplier, showing their specific delivery track record and contract health.
-
-**Transition to Page 3:** Contract compliance gaps identified here link directly to the compliance risk view on Page 3.
-
----
-
-## PAGE 2 LAYOUT
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  HEADER: Filters — Year | Supplier | Category | Contract Status     │
-├────────┬────────┬────────┬────────┬────────────────────────────────┤
-│ KPI 1  │ KPI 2  │ KPI 3  │ KPI 4  │ KPI 5                          │
-│ On-Time│ Avg    │Contract│ Expiring│ Invoice                        │
-│ Rate % │ Days   │ Cov %  │ 90 days │ Accuracy %                     │
-│        │ Late   │        │         │                               │
-├────────┴────────┴────────┴────────┴────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 1 — 55%]          │  [VISUAL 2 — 45%]                     │
-│  Supplier Scorecard        │  Delivery Performance Trend           │
-│  (Matrix / Table)          │  (Line Chart by Month)                │
-│                            │                                       │
-├────────────────────────────┴───────────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 3 — 50%]          │  [VISUAL 4 — 50%]                     │
-│  Contract Coverage &       │  Invoice Accuracy &                   │
-│  Expiry Timeline           │  Payment Cycle                        │
-│  (Gantt-style bar)         │  (Scatter or Clustered Bar)           │
-│                            │                                       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## PAGE 2 — VISUALS & MEASURES
-
----
-
-### KPI Cards (Row of 5 — top of page)
-
-| Card | Measure | Secondary | Alert Threshold |
-|------|---------|-----------|-----------------|
-| On-Time Delivery Rate | `On Time Delivery Rate` | vs prior year | Red if <85% |
-| Avg Days Late | `Avg Days Late` | # of late POs | Red if >7 days |
-| Contract Coverage | `Contract Coverage %` | Off-contract $ | Red if <80% |
-| Contracts Expiring 90d | `Contracts Expiring in 90 Days` | Count + Value at risk | Red if count > 0 |
-| Invoice Accuracy | `Invoice Accuracy Rate` | Total invoice variance $ | Red if <90% |
-
----
-
-### Visual 1 — Supplier Scorecard (Matrix Visual)
-
-**Business Question:** *"Which specific suppliers are underperforming across the dimensions that matter — delivery, spend, invoice accuracy?"*
-
-**Chart type:** Matrix (table with conditional formatting)
-
-**Rows:** Supplier Name
-**Columns (measures):**
-
-| Column | Measure | Conditional Format |
-|--------|---------|-------------------|
-| Total Spend | `Total Spend` | Data bar |
-| PO Count | `Total PO Count` | — |
-| On-Time Rate | `On Time Delivery Rate` | Red <80%, Amber 80–90%, Green >90% |
-| Avg Days Late | `Avg Days Late` | Red >10d, Amber 5–10d |
-| Invoice Accuracy | `Invoice Accuracy Rate` | Red <85% |
-| Contract Coverage | Supplier-level coverage % | Red <70% |
-| YoY Spend Δ | `YoY Spend Growth %` | Arrow indicator |
-
-```dax
-// Supplier-level Invoice Accuracy
-Supplier Invoice Accuracy =
-DIVIDE(
+Maverick Spend Insight Text =
+VAR _pct       = [Maverick Spend %]
+VAR _val       = FORMAT([Maverick Spend Value] / 1000000, "£0.0M")
+VAR _pctFmt    = FORMAT(_pct, "0.0%")
+VAR _worstDept =
     CALCULATE(
-        COUNTROWS(PO_Transactions),
-        ABS(PO_Transactions[Invoice Variance Pct]) <= 0.05
-    ),
-    CALCULATE(
-        COUNTROWS(PO_Transactions),
-        NOT(ISBLANK(PO_Transactions[Invoice_Amount]))
-    ),
-    0
+        FIRSTNONBLANK(data[Department], 1),
+        TOPN(1, VALUES(data[Department]), [Maverick Spend %], DESC)
+    )
+VAR _worstPct  = FORMAT(
+    CALCULATE([Maverick Spend %], data[Department] = _worstDept),
+    "0.0%")
+RETURN
+SWITCH(TRUE(),
+    _pct = 0,
+        "✓ No maverick spend recorded this period. All purchases passed through approved channels.",
+    _pct <= 0.05,
+        "⚠ " & _val & " (" & _pctFmt & ") outside policy — within tolerance but monitor " &
+        _worstDept & " (" & _worstPct & ").",
+    _pct <= 0.10,
+        "⚠ " & _val & " (" & _pctFmt & ") bypassed procurement. " & _worstDept &
+        " is the primary driver at " & _worstPct & ". Review pre-approval controls.",
+        "⛔ " & _val & " (" & _pctFmt & ") outside policy — target breached. " &
+        _worstDept & " at " & _worstPct & ". Escalate immediately."
 )
-
-// Supplier Risk Score (composite: weight delivery + compliance + invoice)
-Supplier Risk Score =
-VAR DeliveryScore = (1 - [On Time Delivery Rate]) * 40
-VAR ComplianceScore = (1 - [Contract Coverage %]) * 35
-VAR InvoiceScore = (1 - [Invoice Accuracy Rate]) * 25
-RETURN ROUND(DeliveryScore + ComplianceScore + InvoiceScore, 1)
 ```
 
-**Design note:** Sort by `Supplier Risk Score` descending by default so highest-risk suppliers appear first. Add a slicer to filter to "Critical Suppliers" (top 10 by spend).
+### Filter intelligence
 
----
-
-### Visual 2 — Delivery Performance Trend (Line Chart)
-
-**Business Question:** *"Is our overall on-time delivery improving or deteriorating over time? Are problems seasonal or structural?"*
-
-**Chart type:** Line chart with two series
-
-**X-axis:** Month-Year
-**Y-axis (left):** `On Time Delivery Rate` (%)
-**Y-axis (right):** `Avg Days Late` (days)
-
-**Reference line:** 90% on-time target line (horizontal, dashed)
-
-**Drill-through:** Click any month to drill to individual POs that were late.
-
-**Measures used:**
 ```dax
-// Monthly On-Time Rate (for trend)
-Monthly OTD Rate =
-CALCULATE(
-    [On Time Delivery Rate],
-    DATESMTD('Date'[Date])
-)
+-- Counts active slicer selections per filter group.
+-- Drop into a Card visual beside each filter group header.
 
-// Late PO Volume (for secondary context)
-Late PO Count =
-CALCULATE(
-    [Total PO Count],
-    PO_Transactions[Delivery Status] = "Late"
-)
+Active Supplier Filters =
+VAR _name    = ISFILTERED(data[Supplier_Name])
+VAR _risk    = ISFILTERED(data[Supplier_Risk])
+VAR _tier    = ISFILTERED(data[Supplier_Tier])
+VAR _pref    = ISFILTERED(data[Preferred_Supplier])
+VAR _status  = ISFILTERED(data[Supplier_Status])
+RETURN
+CONVERT(_name, INTEGER) +
+CONVERT(_risk, INTEGER) +
+CONVERT(_tier, INTEGER) +
+CONVERT(_pref, INTEGER) +
+CONVERT(_status, INTEGER)
 ```
 
 ---
 
-### Visual 3 — Contract Coverage & Expiry (Gantt-style Timeline)
+## Filter Architecture
 
-**Business Question:** *"Which contracts are expiring soon? Which spend is at risk of falling off-contract?"*
+Each page uses a structured filter pane that opens from the **OPEN FILTER** button. Slicers are grouped into labelled sections. A filter intelligence counter shows active selections in each group — so users always know what context they are viewing. The filter bar across the top of each page displays `Selected Slicers: GroupName(n) | GroupName(n) | ...`
 
-**Chart type:** Gantt bar chart (built using a stacked bar visual or a custom Gantt visual from AppSource)
+### Page 1 — Supplier, Geography, Contract, Invoice, Payment, Risk
 
-**Y-axis:** Contract Name / Supplier
-**X-axis:** Date (2022–2025)
-**Bar length:** Contract duration (Start Date to End Date)
-**Color encoding:**
-- Green: Active, >90 days remaining
-- Amber: Expiring within 90 days
-- Red: Expired (spend still occurring against it)
-- Gray: Expired, no active spend
+| Group | Slicers |
+|---|---|
+| Supplier | Supplier Name · Supplier Risk · Supplier Tier · Supplier Preference · Supplier Status |
+| Geography | Supplier Region · Supplier Country |
+| Contract | Requestor Name · Approver Name · Contract Type · Match Quality · Contract Duration |
+| Invoice | Invoice Match Type · Invoice Status · Invoice Age Band · Delivery Status |
+| Payment | Currency · Unit of Measure · Payment Terms · Payment Status |
+| Risk | Maverick Spend · Single Source Flag · Sourcing Risk Flag |
 
-**Spend at risk annotation:** Contracts expiring in <90 days should show total annual spend value in the data label.
+### Page 2 — Calendar, Procurement, Contract, Invoice, Payment, Risk
 
-**Measures used:**
-```dax
-// Spend at Risk (from expiring contracts)
-Spend at Risk =
-CALCULATE(
-    [Total Spend],
-    Contracts[Contract_End_Date] <= TODAY() + 90,
-    Contracts[Contract_End_Date] >= TODAY()
-)
+| Group | Slicers |
+|---|---|
+| Calendar | Date Between · Date Hierarchy · Tax Percentage · Day Name · Item Description |
+| Procurement | Department · Category · Subcategory · PO Status · PO Type |
+| Contract | Requestor Name · Approver Name · Contract Type · Match Quality · Contract Duration |
+| Invoice | Invoice Match Type · Invoice Status · Invoice Age Band · Delivery Status |
+| Payment | Currency · Unit of Measure · Payment Terms · Payment Status |
+| Risk | Maverick Spend · Single Source Flag · Sourcing Risk Flag |
 
-// Off-Contract Spend Rate (monthly)
-Off-Contract Rate =
-DIVIDE(
-    CALCULATE([Total Spend], PO_Transactions[Is Compliant] = 0),
-    [Total Spend],
-    0
-)
-```
+### Page 3 — Supplier, Geography, Contract, Operations, Payment, Risk
 
----
-
-### Visual 4 — Invoice & Payment Performance (Clustered Bar)
-
-**Business Question:** *"Are we being invoiced accurately and paying on time? Where are we losing money to invoice discrepancies?"*
-
-**Chart type:** Clustered Bar (Invoice Variance by Category) + small KPI tiles for payment cycle
-
-**Y-axis:** Category or Supplier
-**X-axis:** Invoice Variance ($) — show both positive (overbilled) and negative (underbilled) bars
-**Color:** Red for overbilling (supplier billed more than PO), Blue for underbilling
-
-**Measures used:**
-```dax
-// Total Overbilling
-Total Overbilling =
-SUMX(
-    FILTER(PO_Transactions, PO_Transactions[Invoice Variance] > 0),
-    PO_Transactions[Invoice Variance]
-)
-
-// Avg Days to Pay (payment cycle efficiency)
-Avg Days to Pay =
-AVERAGEX(
-    FILTER(PO_Transactions, NOT(ISBLANK(PO_Transactions[Payment_Date]))),
-    DATEDIFF(PO_Transactions[Invoice_Date], PO_Transactions[Payment_Date], DAY)
-)
-
-// Payment within terms (e.g., Net 30)
-Payment Within Terms % =
-DIVIDE(
-    CALCULATE(
-        [Total PO Count],
-        PO_Transactions[Payment Status] = "Paid",
-        DATEDIFF(PO_Transactions[Invoice_Date], PO_Transactions[Payment_Date], DAY) <= 30
-    ),
-    CALCULATE([Total PO Count], PO_Transactions[Payment Status] = "Paid"),
-    0
-)
-```
+| Group | Slicers |
+|---|---|
+| Supplier | Supplier Name · Supplier Risk · Supplier Tier · Supplier Preference · Supplier Status |
+| Geography | Supplier Region · Supplier Country |
+| Contract | Requestor Name · Approver Name · Contract Type · Match Quality · Contract Duration |
+| Operations | Date Hierarchy · Item Description · PO Status · PO Type · Delivery Status |
+| Payment | Currency · Unit of Measure · Payment Terms · Payment Status |
+| Risk | Maverick Spend · Single Source Flag · Sourcing Risk Flag |
 
 ---
 
----
+## Key Findings
 
-# PAGE 3: COMPLIANCE, SAVINGS & RISK
+All values in local currency — no FX conversion applied.
 
-**Executive Question:** *"Are we following procurement rules, realizing our cost savings, and where are the biggest operational risks?"*
-
-**Transition from Page 2:** Page 2 showed which suppliers have low contract coverage. Page 3 quantifies the COST of that non-compliance and maps it alongside savings performance — answering whether efficiency gains are being offset by compliance failures.
-
----
-
-## PAGE 3 LAYOUT
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  HEADER: Filters — Year | Category | Compliance Status              │
-├────────┬────────┬────────┬────────┬────────────────────────────────┤
-│ KPI 1  │ KPI 2  │ KPI 3  │ KPI 4  │  KPI 5                         │
-│Complian│ Total  │ Savings│Savings │  High-Risk                     │
-│ce Rate │ Savings│ Rate % │vs Target│  PO Count                     │
-├────────┴────────┴────────┴────────┴────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 1 — 55%]          │  [VISUAL 2 — 45%]                     │
-│  Compliance Rate Trend     │  Savings Waterfall                    │
-│  + Off-Contract Spend      │  (Waterfall Chart)                    │
-│  (Dual-axis Line)          │                                       │
-│                            │                                       │
-├────────────────────────────┴───────────────────────────────────────┤
-│                                                                     │
-│  [VISUAL 3 — 50%]          │  [VISUAL 4 — 50%]                     │
-│  Risk Matrix               │  Tail Spend Analysis                  │
-│  (Scatter: Spend vs Risk)  │  (Donut + Bar)                        │
-│                            │                                       │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Area | Finding | Value | Status |
+|---|---|---|---|
+| Spend | Total procurement spend 2022–2024 | £979.40M | — |
+| Spend | Year-on-year growth | +50.2% | ▲ Strong |
+| Spend | Budget variance | -3.32% | ✓ Within range |
+| Spend | Emergency PO rate | 10.60% | ✗ Target < 5% |
+| Spend | Cancelled PO rate | 10.17% | ⚠ Monitor |
+| Delivery | On-time delivery rate | 64.13% | ✗ Target ≥ 95% |
+| Delivery | Average lead time | 36 days | ⚠ Range 0–90 days |
+| Delivery | Average days late | 16 days | ⚠ Review categories |
+| Supplier | Tier 1 (Strategic) spend share | 33.38% | ⚠ Consolidate |
+| Supplier | High-risk supplier spend | £63.52M · 6.49% | ⚠ Monitor |
+| Supplier | Single-source spend | £122.00M · 11.87% | ⚠ Diversify |
+| Savings | Total savings delivered | £104.27M · 10.29% | ✓ Target 10–20% |
+| Savings | Total overspend | -£18.66M | ⚠ Category review |
+| Compliance | Compliant spend | £874.00M · 89.24% | ⚠ Target ≥ 90% |
+| Compliance | Maverick spend | £105.40M · 10.76% | ✗ Target = 0% |
+| Control | 3-Way invoice match rate | 41.13% | ✗ Below standard |
+| Control | Overdue invoices | £136.37M · 15.52% | ⚠ Monitor |
+| Control | Overdue 90+ day savings impact | -£618.23M | ✗ Critical risk |
 
 ---
 
-## PAGE 3 — VISUALS & MEASURES
+## Design Philosophy
+
+**Every visual must earn its place.** Before any chart was added to the report, it was tested against one question: *does this help a leader make a decision they could not otherwise make?* Visuals that describe data without enabling action were excluded.
+
+**The report is a narrative, not a dashboard.** The three-page structure builds a case: establish the financial scale (Page 1), diagnose operational execution (Page 2), confirm whether controls are holding (Page 3). A reader who moves through all three pages arrives at a complete picture of procurement health without jumping between pages to form a view.
+
+**The KPI card is a sentence, not a number.** Dynamic insight text measures ensure every KPI card communicates a value, a gap to target, the primary driver, and a recommended action — in two lines. The report speaks to the reader rather than making them interpret raw figures.
+
+**Filter transparency prevents misreading.** Filter intelligence counters in the filter bar mean consumers always know what slice of data they are viewing. A clean filter bar with zero counts is an explicit confirmation the full dataset is in scope.
+
+**Conditional formatting is deliberate, not decorative.** Colour communicates status: blue gradient for OTIF (darker = better), red for negative budget variance, green/red for savings/overspend columns. Colour is never used purely for visual variety.
+
+**Drill-down is earned, not assumed.** Every visual that supports drill-down signals it in the subtitle (e.g. *DRILL DOWN TO SUBCATEGORY*) so users know the interaction is available without trial and error.
 
 ---
 
-### KPI Cards (Row of 5 — top of page)
+## Tools & Technologies
 
-| Card | Measure | Secondary | Alert |
-|------|---------|-----------|-------|
-| Compliance Rate | `Compliance Rate` | # Non-compliant POs | Red if <85% |
-| Total Savings | `Total Savings` | vs same period last year | — |
-| Savings Rate | `Savings Rate %` | Industry benchmark: 5–8% | Amber if <5% |
-| Savings vs Target | `Savings vs Target` | % of target achieved | Red if negative |
-| High-Risk POs | `High Risk PO Count` | Total value of high-risk POs | Red if >0 |
-
----
-
-### Visual 1 — Compliance Trend + Off-Contract Spend (Dual-Axis Line)
-
-**Business Question:** *"Is compliance improving over time? Is off-contract spend growing as a systemic problem?"*
-
-**Chart type:** Dual-axis line chart
-
-**X-axis:** Month-Year (2022–2024)
-**Y-axis Left:** `Compliance Rate` (%) — line in green
-**Y-axis Right:** `Off-Contract Spend` ($) — line in red
-**Reference line:** 90% compliance target (horizontal dashed)
-
-**Insight this enables:** If compliance rate drops and off-contract spend rises simultaneously, it signals a systemic process breakdown — not random. If they diverge (compliance holds but off-contract spend rises), it may indicate contract value vs. threshold misalignment.
-
-**Measures used:**
-```dax
-// Rolling 3-month compliance rate
-Compliance 3M Rolling =
-AVERAGEX(
-    DATESINPERIOD('Date'[Date], LASTDATE('Date'[Date]), -3, MONTH),
-    [Compliance Rate]
-)
-
-// Non-compliant PO count trend
-Non-Compliant PO Count =
-CALCULATE(
-    [Total PO Count],
-    PO_Transactions[Is Compliant] = 0
-)
-```
+| | |
+|---|---|
+| **Reporting** | Microsoft Power BI Desktop |
+| **Query language** | DAX (Data Analysis Expressions) |
+| **Data preparation** | Power Query (M language) |
+| **Map visual** | Bing Maps (lat/long coordinates) |
+| **Time intelligence** | Custom Calendar table · marked as Date Table |
+| **Dynamic text** | DAX string measures in Card visuals |
+| **Conditional formatting** | Measure-driven rules across all three pages |
 
 ---
 
-### Visual 2 — Savings Waterfall (Waterfall Chart)
+## Targets Reference
 
-**Business Question:** *"What drove our savings — and what offset them? Are we achieving net positive procurement savings?"*
-
-**Chart type:** Waterfall Chart
-
-**Structure:**
-- Starting baseline: `SUM(PO_Transactions[Baseline_Cost])` (total if no savings were achieved)
-- Positive bars (savings drivers): Negotiated price reduction, Volume discounts, Early payment discounts, Contract consolidation savings
-- Negative bars (savings offsets): Invoice overbilling, Maverick/off-contract premium spend, Price escalation
-- Net result: Actual Total Spend
-
-**Measures used:**
-```dax
-// Savings by type (requires Savings[Savings_Type] column)
-Negotiated Savings =
-CALCULATE([Total Savings], Savings[Savings_Type] = "Negotiated Price")
-
-Volume Discount Savings =
-CALCULATE([Total Savings], Savings[Savings_Type] = "Volume Discount")
-
-Off-Contract Premium =
-SUMX(
-    FILTER(PO_Transactions, PO_Transactions[Is Compliant] = 0),
-    PO_Transactions[PO_Amount] * 0.08
-)
-// ^ 8% premium is illustrative — adjust to your actual benchmark
-```
+| Metric | Target | Rationale |
+|---|---|---|
+| OTIF % | Reliability % | Industry standard for supply chain reliability |
+| Maverick Spend % | 0% | Any bypass is a policy breach — no tolerance |
+| Compliant Spend % | ≥ 90% | Practical floor accounting for approved exceptions |
+| Savings Rate % | 10–20% | Balanced target: efficiency without under-investment |
+| Emergency PO % | < 5% | Higher rates signal planning and process failure |
+| 3-Way Match % | > 80% | Financial control standard for payables integrity |
 
 ---
 
-### Visual 3 — Supplier Risk Matrix (Scatter Chart)
-
-**Business Question:** *"Which suppliers combine HIGH spend exposure with LOW performance — creating the most strategic risk to the organization?"*
-
-**Chart type:** Scatter plot
-
-**X-axis:** `Total Spend` (financial exposure)
-**Y-axis:** `Supplier Risk Score` (composite performance risk — higher = more risk)
-**Bubble size:** `PO Count` (volume of transactions)
-**Color:** Delivery Status (Green = >90% OTD, Amber = 80–90%, Red = <80%)
-
-**Quadrant labels (add as text boxes):**
-```
-High Spend + High Risk → TOP RIGHT: "Critical — Immediate Action"
-Low Spend + High Risk  → TOP LEFT:  "Watch List"
-High Spend + Low Risk  → BOTTOM RIGHT: "Strategic Partners"
-Low Spend + Low Risk   → BOTTOM LEFT:  "Standard Vendors"
-```
-
-**Measures used:**
-- `Total Spend`
-- `Supplier Risk Score` (calculated column from Page 2)
-- `On Time Delivery Rate`
-- `Total PO Count`
-
-**Tooltip:** Supplier Name, Spend, OTD Rate, Invoice Accuracy, Contract Coverage %, Risk Score
-
-**Interaction:** Click a bubble → drill-through to Page 2 filtered to that supplier.
-
----
-
-### Visual 4 — Tail Spend Analysis (Donut + Bar)
-
-**Business Question:** *"How much of our spend is fragmented, low-value, and difficult to manage? Is tail spend growing?"*
-
-**Chart type:** Donut chart for proportion + Horizontal bar for category breakdown of tail spend
-
-**Donut:**
-- Segments: Strategic (≥$100K), Tactical ($25K–$99K), Operational ($5K–$24K), Tail Spend (<$5K)
-- Measure: `Total Spend` by `Spend Tier`
-
-**Bar (placed beside donut):**
-- Y-axis: Category
-- X-axis: Tail spend within each category
-- Highlights categories with the most fragmented/unmanaged tail
-
-**Measures used:**
-```dax
-Tail Spend Amount =
-CALCULATE([Total Spend], PO_Transactions[Spend Tier] = "Tail Spend (<$5K)")
-
-Tail Spend PO Count =
-CALCULATE([Total PO Count], PO_Transactions[Spend Tier] = "Tail Spend (<$5K)")
-
-Tail Spend Avg PO Value =
-DIVIDE([Tail Spend Amount], [Tail Spend PO Count])
-
-// Tail spend by category
-Tail Spend by Category =
-CALCULATE(
-    [Total Spend],
-    PO_Transactions[Spend Tier] = "Tail Spend (<$5K)"
-)
-```
-
-**Why this matters:** If tail spend accounts for >20% of transactions but <5% of spend, consolidation opportunity exists. High tail spend in strategic categories signals process breakdowns.
-
----
-
----
-
-## CROSS-PAGE INTERACTIONS & DRILL-THROUGH
-
-| From | Action | Target |
-|------|--------|--------|
-| Page 1 — Supplier bar | Click supplier name | Filters Page 2 to that supplier |
-| Page 1 — Category treemap | Click category | Filters all pages to that category |
-| Page 2 — Supplier scorecard row | Right-click → Drill through | Page 3 filtered to that supplier's compliance/savings |
-| Page 3 — Risk scatter bubble | Click | Drill-through to Page 2 supplier view |
-| Any KPI Card | Click "Off-Contract Spend" | Navigate to Page 3 with non-compliant filter applied |
-
----
-
-## REPORT-LEVEL SETTINGS
-
-### Filters (report-level — apply across all pages)
-- Year slicer (2022 / 2023 / 2024 / All)
-- Quarter slicer
-- Fiscal vs Calendar Year toggle (if applicable)
-
-### Slicers (page-specific)
-- Page 1: Category, Business Unit
-- Page 2: Supplier, Contract Status (Active / Expiring / Expired)
-- Page 3: Compliance Status (Compliant / Non-Compliant), Savings Type
-
-### Bookmarks (recommended)
-- "Executive View" — hides all drill-downs, shows KPIs + top-level charts
-- "Operational View" — expands all matrices, shows row-level detail
-- "Year-End Review" — pre-filters to full-year comparison
-
----
-
-## COLOR PALETTE & THEME
-
-```json
-{
-  "name": "Procurement Analytics",
-  "dataColors": [
-    "#1A56DB",  // Primary blue (spend, neutral)
-    "#0E9F6E",  // Green (on-time, compliant, savings)
-    "#E3A008",  // Amber (warning, near-threshold)
-    "#E02424",  // Red (overbudget, non-compliant, risk)
-    "#7E3AF2",  // Purple (contracts, secondary analysis)
-    "#1C64F2",  // Light blue (PO volume)
-    "#6B7280"   // Gray (baselines, prior year)
-  ],
-  "background": "#F9FAFB",
-  "foreground": "#111827",
-  "tableAccent": "#1A56DB"
-}
-```
-
----
-
-## PERFORMANCE OPTIMIZATION NOTES
-
-1. **Aggregation tables:** Pre-aggregate PO_Transactions by Month + Category + Supplier for trend visuals to reduce scan time on 5,200 rows (low impact here, but good practice).
-2. **Disable auto date/time:** Turn off in File → Options → Data Load → disable "Auto date/time" to prevent hidden date tables.
-3. **Incremental refresh:** If dataset grows beyond 50K rows, configure incremental refresh policies on PO_Date.
-4. **Visual-level filters:** Apply filters at visual level (not page level) where possible to allow cross-filtering to work correctly.
-5. **DirectQuery vs Import:** Import mode recommended for this dataset size (5,200 rows). Use DirectQuery only if near-real-time refresh is required.
+*This report was built as a portfolio project. The dataset is simulated and does not represent any real organisation's procurement activity.*
