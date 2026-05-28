@@ -704,5 +704,3 @@ All values in local currency — no FX conversion applied.
 | 3-Way Match % | > 80% | Financial control standard for payables integrity |
 
 ---
-
-*This report was built as a portfolio project. The dataset is simulated and does not represent any real organisation's procurement activity.*
